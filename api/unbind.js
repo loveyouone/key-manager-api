@@ -1,32 +1,6 @@
-import express from 'express';
-import { connectToDatabase } from '../lib/mongodb';
+import { MongoClient } from 'mongodb';
 
-const router = express.Router();
-router.use(express.json());
-
-// 连接池管理
-let dbConnection = null;
-const getDbConnection = async () => {
-  if (!dbConnection) {
-    const { db } = await connectToDatabase();
-    dbConnection = db;
-    console.log('[DB] 创建新的数据库连接');
-  }
-  return dbConnection;
-};
-
-// 连接健康检查
-setInterval(async () => {
-  try {
-    const db = await getDbConnection();
-    await db.command({ ping: 1 });
-  } catch (error) {
-    console.error('[DB] 连接健康检查失败, 重置连接', error);
-    dbConnection = null; // 重置连接
-  }
-}, 30000); // 每30秒检查一次
-
-router.post('/', async (req, res) => {
+export default async (req, res) => {
   console.log(`[UNBIND] 收到解绑请求: ${JSON.stringify(req.body)}`);
   
   // 验证请求
@@ -39,11 +13,23 @@ router.post('/', async (req, res) => {
 
   const { key } = req.body;
   
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    console.error('MONGODB_URI 未设置');
+    return res.status(500).json({ error: '服务器配置错误' });
+  }
+
+  const client = new MongoClient(uri, {
+    serverSelectionTimeoutMS: 5000
+  });
+
   try {
-    const db = await getDbConnection();
-    
-    // 查找卡密
-    const keyDoc = await db.collection('keys').findOne({ key });
+    await client.connect();
+    const db = client.db('key_db');
+    const collection = db.collection('keys');
+
+    // 查找卡密 (确保字段大小写一致)
+    const keyDoc = await collection.findOne({ key });
     if (!keyDoc) {
       console.warn(`[UNBIND] 卡密不存在: ${key}`);
       return res.status(404).json({ 
@@ -59,12 +45,12 @@ router.post('/', async (req, res) => {
       });
     }
     
-    // 执行解绑
-    const result = await db.collection('keys').updateOne(
+    // 执行解绑 (保持字段大小写一致)
+    const result = await collection.updateOne(
       { key },
       { 
         $set: { 
-          playerId: '待定',
+          playerId: '待定',  // 注意小写p
           expireTime: null,
           lastUnbind: new Date() 
         } 
@@ -85,18 +71,13 @@ router.post('/', async (req, res) => {
     }
   } catch (error) {
     console.error('[UNBIND] 服务器错误:', error);
-    
-    // 重置问题连接
-    if (error.message.includes('topology was destroyed')) {
-      dbConnection = null;
-      console.warn('[DB] 重置数据库连接');
-    }
-    
     return res.status(500).json({ 
       error: '服务器内部错误',
-      code: error.code || 'UNKNOWN_ERROR'
+      message: error.message
     });
+  } finally {
+    if (client) {
+      await client.close();
+    }
   }
-});
-
-export default router;
+};
