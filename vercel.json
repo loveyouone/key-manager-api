@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "routes": [
+    {
+      "src": "/keys",
+      "dest": "/api/keys"
+    },
+    {
+      "src": "/unbind",
+      "methods": ["POST"],
+      "dest": "/api/unbind"
+    }
+  ]
+}
