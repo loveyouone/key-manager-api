@@ -37,26 +37,27 @@ module.exports = async (req, res) => {
     const db = await getDatabase();
     const collection = db.collection('keys');
 
-    // 修复字段大小写
+    // 查找卡密
     const keyDoc = await collection.findOne({ key });
     if (!keyDoc) {
       console.warn(`[UNBIND] 卡密不存在: ${key}`);
       return res.status(404).json({ error: '卡密不存在' });
     }
     
-    if (!keyDoc.playerId || keyDoc.playerId === '待定') {
+    // 检查卡密是否绑定 - 使用小写字段 playerid
+    if (!keyDoc.playerid || keyDoc.playerid === '待定') {
       console.warn(`[UNBIND] 卡密未绑定: ${key}`);
       return res.status(400).json({ error: '卡密尚未绑定，无需解绑' });
     }
     
-    // 修复字段大小写
+    // 更新卡密 - 使用小写字段 playerid 和 lastunbind
     const result = await collection.updateOne(
       { key },
       { 
         $set: { 
-          playerId: '待定',
-          expireTime: null,
-          lastUnbind: new Date() 
+          playerid: '待定',
+          expiretime: null,
+          lastunbind: new Date()   // 改为小写
         } 
       }
     );
