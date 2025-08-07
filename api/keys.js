@@ -1,46 +1,51 @@
 import { MongoClient } from 'mongodb';
 
-export default async (req, res) => {
-  console.log("==== 开始处理 /keys 请求 ====");
-  
-  const uri = process.env.MONGODB_URI;
-  console.log("使用的 MONGODB_URI:", uri ? "已设置" : "未设置");
-  
-  if (!uri) {
-    console.error("错误: MONGODB_URI 环境变量未配置");
-    return res.status(500).json({ 
-      error: '服务器配置错误: MONGODB_URI 未设置'
-    });
+// 连接池管理
+let cachedClient = null;
+
+async function getDatabase() {
+  if (cachedClient && cachedClient.isConnected()) {
+    return cachedClient.db('key_db');
   }
 
+  const uri = process.env.MONGODB_URI;
+  if (!uri) throw new Error('MONGODB_URI not configured');
+
   const client = new MongoClient(uri, {
-    serverSelectionTimeoutMS: 5000 // 5秒超时
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 5000
   });
 
+  await client.connect();
+  cachedClient = client;
+  return client.db('key_db');
+}
+
+// 使用CommonJS导出
+module.exports = async (req, res) => {
+  console.log("==== 开始处理 /keys 请求 ====");
+  
   try {
-    console.log("尝试连接 MongoDB...");
-    await client.connect();
-    console.log("成功连接到 MongoDB");
-    
-    const db = client.db('key_db');
+    const db = await getDatabase();
     console.log("使用的数据库: key_db");
     
     const collection = db.collection('keys');
     console.log("使用的集合: keys");
-    
     console.log("查询所有卡密...");
+    
     const keys = await collection.find({}).toArray();
     console.log(`找到 ${keys.length} 条卡密记录`);
     
-    // 格式转换
+    // 修复字段大小写问题
     const result = {};
     keys.forEach(key => {
-      result[key._id] = {
+      result[key.key] = {
         PlayerId: key.playerId,
         Reward: key.reward
       };
       if (key.expireTime) {
-        result[key._id].ExpireTime = key.expireTime;
+        result[key.key].ExpireTime = key.expireTime;
       }
     });
     
@@ -53,10 +58,5 @@ export default async (req, res) => {
       error: '数据库操作失败',
       message: error.message
     });
-  } finally {
-    if (client) {
-      console.log("关闭数据库连接");
-      await client.close();
-    }
   }
 };
