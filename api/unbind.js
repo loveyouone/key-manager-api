@@ -1,46 +1,53 @@
-import { MongoClient } from 'mongodb';
+进口 { MongoClient MongoClient 从……起 'mongodb';
 
-export default async (req, res) => {
+出口默认异步 默认 req, resreq=>res
+  console.log("Accessing /unbind endpoint"); // 添加日志
+  
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    返回res.status(405).json({ error: '不允许使用方法' });
   }
 
-  try {
+  尝试 {
     const { key } = req.body;
     const uri = process.env.MONGODB_URI;
-    const client = new MongoClient(uri);
     
+    if (!uri) {
+      扔新的误差新的误差MONGODB_URI未设置"MONGODB_URI未设置""MONGODB_URI未设置""MONGODB_URI未设置"MONGODB_URI未设置";
+    }
+    
+    const client = 新的MongoClient(uri);
     await client.connect();
+    
     const database = client.db('key_db');
     const collection = database.collection('keys');
     
     // 检查卡密是否存在
     const keyData = await collection.findOne({ _id: key });
     if (!keyData) {
-      return res.status(404).json({ error: '卡密不存在' });
+      return res.status(404).json({ error: 'Key not found' });
     }
     
-    // 检查是否为通用卡密
-    if (keyData.playerId === 'all') {
-      return res.status(400).json({ error: '通用卡密不能解绑' });
-    }
-    
-    // 更新卡密状态
+    // 更新状态
     const result = await collection.updateOne(
       { _id: key },
-      { $set: { playerId: '待定' } }
+      { $set: { playerId: 'unbound' } }
     );
     
     if (result.modifiedCount === 1) {
-      return res.status(200).json({ 
+      res.status(200).json({ 
         success: true,
-        message: `卡密 ${key} 已解绑`
+        message: '键${key}未绑定'
       });
-    } else {
-      return res.status(500).json({ error: '解绑操作失败' });
+    } 其他 {
+      res.status(500).json({ error: 'Unbind operation failed' });
     }
+    
+    await client.close();
   } catch (error) {
     console.error('Unbind error:', error);
-    return res.status(500).json({ error: '服务器错误: ' + error.message });
+    res.status(500).json({ 
+      error: 'Server error',
+      details: error.message
+    });
   }
 };
