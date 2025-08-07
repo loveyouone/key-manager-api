@@ -37,15 +37,17 @@ module.exports = async (req, res) => {
     const keys = await collection.find({}).toArray();
     console.log(`找到 ${keys.length} 条卡密记录`);
     
-    // 修复字段大小写问题
+    // 修复字段大小写问题并转换时间格式
     const result = {};
     keys.forEach(key => {
       result[key.key] = {
-        PlayerId: key.playerId,
-        Reward: key.reward
+        playerid: key.playerId,  // 统一改为小写
+        reward: key.reward        // 统一改为小写
       };
+      
+      // 如果存在过期时间，转换为Unix时间戳(秒)
       if (key.expireTime) {
-        result[key.key].ExpireTime = key.expireTime;
+        result[key.key].expiretime = Math.floor(key.expireTime.getTime() / 1000);
       }
     });
     
