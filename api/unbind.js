@@ -1,21 +1,26 @@
-进口 { MongoClient MongoClient 从……起 'mongodb';
+import { MongoClient } from 'mongodb';
 
-出口默认异步 默认 req, resreq=>res
-  console.log("Accessing /unbind endpoint"); // 添加日志
+export default async (req, res) => {
+  console.log(`==== 处理 ${req.method} ${req.url} 请求 ====`);
   
+  // 验证请求方法
   if (req.method !== 'POST') {
-    返回res.status(405).json({ error: '不允许使用方法' });
+    console.warn(`错误请求方法: ${req.method}, 需要 POST`);
+    return res.status(405).json({ 
+      error: '方法不允许',
+      allowed: ['POST'] 
+    });
   }
-
-  尝试 {
+  
+  try {
     const { key } = req.body;
     const uri = process.env.MONGODB_URI;
     
     if (!uri) {
-      扔新的误差新的误差MONGODB_URI未设置"MONGODB_URI未设置""MONGODB_URI未设置""MONGODB_URI未设置"MONGODB_URI未设置";
+      throw new Error("MONGODB_URI not set");
     }
     
-    const client = 新的MongoClient(uri);
+    const client = new MongoClient(uri);
     await client.connect();
     
     const database = client.db('key_db');
@@ -36,9 +41,9 @@
     if (result.modifiedCount === 1) {
       res.status(200).json({ 
         success: true,
-        message: '键${key}未绑定'
+        message: `Key ${key} unbound`
       });
-    } 其他 {
+    } else {
       res.status(500).json({ error: 'Unbind operation failed' });
     }
     
