@@ -16,6 +16,11 @@
       "src": "/unbind",
       "dest": "server.js",
       "methods": ["POST"]
+    },
+    {
+      "src": "/bind",  // 新增绑定路由
+      "dest": "server.js",
+      "methods": ["POST"]
     }
   ]
 }
