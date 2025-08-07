@@ -3,12 +3,12 @@
   "routes": [
     {
       "src": "/keys",
-      "dest": "/api/keys"
+      "dest": "/api/keys.js"  // 添加.js扩展名
     },
     {
       "src": "/unbind",
       "methods": ["POST"],
-      "dest": "/api/unbind"
+      "dest": "/api/unbind.js"  // 添加.js扩展名
     }
   ]
 }
