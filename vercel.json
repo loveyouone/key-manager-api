@@ -1,11 +1,9 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "server.js",
-      "use": "@vercel/node"
-    }
-  ],
+  "builds": [{
+    "src": "server.js",
+    "use": "@vercel/node"
+  }],
   "routes": [
     {
       "src": "/keys",
@@ -18,9 +16,12 @@
       "methods": ["POST"]
     },
     {
-      "src": "/bind",  // 新增绑定路由
+      "src": "/bind",
       "dest": "server.js",
       "methods": ["POST"]
     }
-  ]
+  ],
+  "env": {
+    "MONGODB_URI": "@mongodb_uri"
+  }
 }
