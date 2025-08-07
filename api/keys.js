@@ -1,40 +1,62 @@
-进口{ MongoClient } 从……起'mongodb';
+import { MongoClient } from 'mongodb';
 
-出口默认异步 (req, res)=>{
-  控制台.日志("正在访问/keys终结点"); // 添加日志
+export default async (req, res) => {
+  console.log("==== 开始处理 /keys 请求 ====");
   
-  尝试{
-    const Uri=过程.env.MongoDB_URI;
-    如果 (!uri) {
-      扔新的误差""MongoDB_URI未设置""""MongoDB_URI未设置";
-    }
+  const uri = process.env.MONGODB_URI;
+  console.log("使用的 MONGODB_URI:", uri ? "已设置" : "未设置");
+  
+  if (!uri) {
+    console.error("错误: MONGODB_URI 环境变量未配置");
+    return res.status(500).json({ 
+      error: '服务器配置错误: MONGODB_URI 未设置'
+    });
+  }
+
+  const client = new MongoClient(uri, {
+    serverSelectionTimeoutMS: 5000 // 5秒超时
+  });
+
+  try {
+    console.log("尝试连接 MongoDB...");
+    await client.connect();
+    console.log("成功连接到 MongoDB");
     
-    const client=新的MongoClient(uri);
-    await client.连接();
+    const db = client.db('key_db');
+    console.log("使用的数据库: key_db");
     
-    const 数据库=client.DB('Key_db');
-    const collection=数据库.collection('键');
-    const 键=await collection.找到({}).toArray();
+    const collection = db.collection('keys');
+    console.log("使用的集合: keys");
     
-    // 转换格式
-    const 结果 = {};
-    keys.foreach(key=>{
+    console.log("查询所有卡密...");
+    const keys = await collection.find({}).toArray();
+    console.log(`找到 ${keys.length} 条卡密记录`);
+    
+    // 格式转换
+    const result = {};
+    keys.forEach(key => {
       result[key._id] = {
-        playerID: key.playerID,
-        奖励: key.奖励
+        PlayerId: key.playerId,
+        Reward: key.reward
       };
-      如果 (key.expireTime) {
-        result[key._id].expiretime = key.expireTime;
+      if (key.expireTime) {
+        result[key._id].ExpireTime = key.expireTime;
       }
     });
     
-    res.状态(200).JSON(result);
-    await client.关闭();
-  } 赶上 (error) {
-    控制台.error('数据库错误：', error);
-    res.status(500).json({ 
-      error: '数据库连接失败',
-      详细资料: error.消息
+    console.log("返回卡密数据");
+    return res.status(200).json(result);
+    
+  } catch (error) {
+    console.error("处理过程中发生错误:", error);
+    return res.status(500).json({ 
+      error: '数据库操作失败',
+      message: error.message
     });
+  } finally {
+    if (client) {
+      console.log("关闭数据库连接");
+      await client.close();
+    }
   }
 };
