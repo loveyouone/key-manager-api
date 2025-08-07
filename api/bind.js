@@ -27,19 +27,19 @@ export default async (req, res) => {
             });
         }
         
-        // 检查卡密是否已经被绑定
-        if (keyData.playerId !== "待定") {
-            console.error(`卡密 ${key} 已经被绑定给玩家 ${keyData.playerId}`);
+        // 检查卡密是否已经被绑定 - 使用小写字段 playerid
+        if (keyData.playerid && keyData.playerid !== "待定") {
+            console.error(`卡密 ${key} 已经被绑定给玩家 ${keyData.playerid}`);
             return res.status(400).json({
                 success: false,
                 error: "卡密已被绑定，无法重新绑定"
             });
         }
         
-        // 更新卡密绑定玩家
+        // 更新卡密绑定玩家 - 使用小写字段 playerid
         const result = await collection.updateOne(
             { key: key },
-            { $set: { playerId: playerId } }
+            { $set: { playerid: playerId } }
         );
         
         if (result.modifiedCount === 1) {
