@@ -1,14 +1,21 @@
 {
   "version": 2,
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    }
+  ],
   "routes": [
     {
       "src": "/keys",
-      "dest": "/api/keys.js"  // 添加.js扩展名
+      "dest": "server.js",
+      "methods": ["GET"]
     },
     {
       "src": "/unbind",
-      "methods": ["POST"],
-      "dest": "/api/unbind.js"  // 添加.js扩展名
+      "dest": "server.js",
+      "methods": ["POST"]
     }
   ]
 }
