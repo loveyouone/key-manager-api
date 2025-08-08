@@ -1,11 +1,8 @@
-const { getAllKeys } = require('../utils/db');
+const db = require('../utils/db');
 
 module.exports = async (req, res) => {
-  console.log("==== 开始处理 /keys 请求 ====");
-  
   try {
-    const keys = await getAllKeys();
-    console.log(`找到 ${keys.length} 条卡密记录`);
+    const keys = await db.getAllKeys();
     
     const result = {};
     keys.forEach(key => {
@@ -19,13 +16,12 @@ module.exports = async (req, res) => {
       }
     });
     
-    console.log("返回卡密数据");
-    return res.status(200).json(result);
+    res.status(200).json(result);
   } catch (error) {
-    console.error("处理过程中发生错误:", error);
-    return res.status(500).json({ 
+    console.error("获取卡密错误:", error);
+    res.status(500).json({
       success: false,
-      error: '数据库操作失败'
+      error: "自动获取卡密失败"
     });
   }
 };
