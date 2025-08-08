@@ -6,22 +6,21 @@ const { MongoClient, ServerApiVersion } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 安全中间件
+// 中间件
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// 全局错误捕获
+// 全局错误处理
 process.on('uncaughtException', (err) => {
-  console.error('[CRITICAL] 未捕获异常:', err);
+  console.error('[UNCAUGHT ERROR]', err);
 });
 
-process.on('unhandledRejection', (reason) => {
-  console.error('[CRITICAL] 未处理的Promise拒绝:', reason);
+process.on('unhandledRejection', (err) => {
+  console.error('[UNHANDLED REJECTION]', err);
 });
 
-// 数据库连接池
-let db;
-const dbOptions = {
+// 数据库配置
+const dbConfig = {
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
@@ -29,27 +28,29 @@ const dbOptions = {
   },
   maxPoolSize: 10,
   connectTimeoutMS: 8000,
-  socketTimeoutMS: 30000,
-  retryWrites: true,
-  retryReads: true
+  socketTimeoutMS: 30000
 };
 
+let dbClient;
+let isDbConnected = false;
+
+// 数据库连接
 async function connectDB() {
   try {
-    const client = new MongoClient(process.env.MONGODB_URI, dbOptions);
-    await client.connect();
-    db = client.db('key_db');
+    dbClient = new MongoClient(process.env.MONGODB_URI, dbConfig);
+    await dbClient.connect();
+    isDbConnected = true;
     console.log('✅ MongoDB连接成功');
-    return client;
   } catch (err) {
     console.error('❌ MongoDB连接失败:', err);
+    isDbConnected = false;
     throw err;
   }
 }
 
-// 数据库健康检查中间件
+// 数据库状态中间件
 app.use(async (req, res, next) => {
-  if (!db) {
+  if (!isDbConnected) {
     try {
       await connectDB();
     } catch (err) {
@@ -73,7 +74,7 @@ app.get('/', (req, res) => {
       unbind: 'POST /api/unbind',
       health: 'GET /health'
     },
-    server: 'Vercel Node.js',
+    database: isDbConnected ? 'connected' : 'disconnected',
     timestamp: new Date().toISOString()
   });
 });
@@ -81,25 +82,28 @@ app.get('/', (req, res) => {
 // 健康检查
 app.get('/health', async (req, res) => {
   try {
-    await db.command({ ping: 1 });
+    await dbClient.db().command({ ping: 1 });
     res.json({
       status: 'healthy',
-      db: 'connected',
-      uptime: process.uptime()
+      database: 'connected',
+      uptime: process.uptime(),
+      memory: `${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)}MB`
     });
   } catch (err) {
     res.status(503).json({
       status: 'degraded',
-      db: 'disconnected',
+      database: 'disconnected',
       error: err.message
     });
   }
 });
 
-// 卡密API
+// 获取卡密（简化版）
 app.get('/api/keys', async (req, res) => {
   try {
-    const keys = await db.collection('keys').find().limit(100).toArray();
+    const collection = dbClient.db('key_db').collection('keys');
+    const keys = await collection.find().limit(100).toArray();
+    
     res.json({
       success: true,
       count: keys.length,
@@ -109,12 +113,11 @@ app.get('/api/keys', async (req, res) => {
     console.error('[GET /keys] 错误:', err);
     res.status(500).json({
       success: false,
-      error: '数据库查询失败'
+      error: '数据库查询失败',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 });
-
-// 其他API路由... (保持原有实现)
 
 // 启动服务
 (async () => {
