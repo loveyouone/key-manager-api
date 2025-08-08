@@ -201,7 +201,7 @@ app.post('/api/bind', async (req, res) => {
         },
         $setOnInsert: {
           createdAt: new Date(),
-          reward: "自动创建卡密",
+          reward: "欢迎",
           expiretime: null
         }
       },
