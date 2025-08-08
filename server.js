@@ -22,7 +22,7 @@ process.on('unhandledRejection', (err) => {
   console.error('[UNHANDLED REJECTION]', err);
 });
 
-// 数据库配置（保持不变）
+// 数据库配置
 const dbConfig = {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -42,9 +42,9 @@ async function connectDB() {
     dbClient = new MongoClient(process.env.MONGODB_URI, dbConfig);
     await dbClient.connect();
     isDbConnected = true;
-    console.log('✅ MongoDB连接成功');
+    console.log(' MongoDB连接成功');
   } catch (err) {
-    console.error('❌ MongoDB连接失败:', err);
+    console.error(' MongoDB连接失败:', err);
     isDbConnected = false;
     throw err;
   }
@@ -74,6 +74,8 @@ app.get('/', (req, res) => {
       keys: 'GET /api/keys',
       bind: 'POST /api/bind',
       unbind: 'POST /api/unbind',
+      validate: 'POST /api/validate',
+      set_expire: 'POST /api/set_expire',
       health: 'GET /health'
     },
     database: isDbConnected ? 'connected' : 'disconnected',
@@ -106,10 +108,22 @@ app.get('/api/keys', async (req, res) => {
     const collection = dbClient.db('key_db').collection('keys');
     const keys = await collection.find().limit(100).toArray();
     
+    // 转换时间戳为可读格式
+    const formattedKeys = keys.map(key => {
+      return {
+        key: key.key,
+        playerid: key.playerid,
+        reward: key.reward,
+        expiretime: key.expiretime ? new Date(key.expiretime * 1000).toISOString() : null,
+        createdAt: key.createdAt ? key.createdAt.toISOString() : null,
+        updatedAt: key.updatedAt ? key.updatedAt.toISOString() : null
+      };
+    });
+    
     res.json({
       success: true,
       count: keys.length,
-      data: keys
+      data: formattedKeys
     });
   } catch (err) {
     console.error('[GET /keys] 错误:', err);
@@ -121,12 +135,247 @@ app.get('/api/keys', async (req, res) => {
   }
 });
 
+// 卡密验证
+app.post('/api/validate', async (req, res) => {
+  try {
+    const { key, playerId } = req.body;
+    
+    if (!key || !playerId) {
+      return res.status(400).json({
+        success: false,
+        error: "缺少必要参数: key 或 playerId"
+      });
+    }
+    
+    // 实时验证卡密
+    const collection = dbClient.db('key_db').collection('keys');
+    const keyData = await collection.findOne({ key });
+    
+    if (!keyData) {
+      return res.status(200).json({
+        success: false,
+        valid: false,
+        error: "卡密不存在"
+      });
+    }
+    
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    
+    // 通用卡密检查
+    if (keyData.playerid === "all") {
+      if (keyData.expiretime && currentTimestamp > keyData.expiretime) {
+        return res.status(200).json({
+          success: false,
+          valid: false,
+          error: `卡密已过期 (过期时间: ${new Date(keyData.expiretime * 1000).toLocaleString()})`
+        });
+      }
+      return res.status(200).json({
+        success: true,
+        valid: true,
+        reward: keyData.reward || "欢迎使用",
+        message: "验证成功"
+      });
+    }
+    
+    // 绑定卡密检查
+    if (keyData.playerid !== playerId) {
+      return res.status(200).json({
+        success: false,
+        valid: false,
+        error: "卡密未绑定到此账号"
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      valid: true,
+      reward: keyData.reward || "欢迎使用",
+      message: "验证成功"
+    });
+    
+  } catch (error) {
+    console.error("验证错误:", error);
+    res.status(500).json({
+      success: false,
+      error: "验证过程出错"
+    });
+  }
+});
+
+// 绑定卡密
+app.post('/api/bind', async (req, res) => {
+  try {
+    const { key, playerId } = req.body;
+    
+    if (!key || !playerId) {
+      return res.status(400).json({
+        success: false,
+        error: "缺少必要参数: key 或 playerId"
+      });
+    }
+    
+    // 自动处理绑定
+    const collection = dbClient.db('key_db').collection('keys');
+    
+    const result = await collection.updateOne(
+      { key },
+      {
+        $set: { 
+          playerid: playerId,
+          updatedAt: new Date()
+        },
+        $setOnInsert: {
+          createdAt: new Date(),
+          reward: "自动创建卡密",
+          expiretime: null
+        }
+      },
+      { upsert: true }
+    );
+    
+    res.status(200).json({
+      success: true,
+      message: "卡密绑定成功",
+      key: key,
+      playerId: playerId,
+      created: result.upsertedCount > 0
+    });
+  } catch (error) {
+    console.error("绑定错误:", error);
+    res.status(500).json({
+      success: false,
+      error: "自动绑定失败: " + error.message
+    });
+  }
+});
+
+// 解绑卡密
+app.post('/api/unbind', async (req, res) => {
+  try {
+    const { key } = req.body;
+    
+    if (!key) {
+      return res.status(400).json({
+        success: false,
+        error: "缺少必要参数: key"
+      });
+    }
+    
+    // 自动处理解绑
+    const collection = dbClient.db('key_db').collection('keys');
+    
+    const result = await collection.updateOne(
+      { key },
+      { $set: { 
+        playerid: '待定',
+        updatedAt: new Date(),
+        expiretime: null
+      }}
+    );
+    
+    if (result.matchedCount === 0) {
+      return res.status(200).json({
+        success: false,
+        error: "卡密不存在"
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: "卡密解绑成功",
+      key: key
+    });
+  } catch (error) {
+    console.error("解绑错误:", error);
+    res.status(500).json({
+      success: false,
+      error: "自动解绑失败: " + error.message
+    });
+  }
+});
+
+// 设置到期时间
+app.post('/api/set_expire', async (req, res) => {
+  try {
+    const { key, expireDate } = req.body;
+    
+    if (!key || !expireDate) {
+      return res.status(400).json({
+        success: false,
+        error: "缺少必要参数: key 或 expireDate"
+      });
+    }
+    
+    // 转换日期为Unix时间戳
+    const expireTime = Math.floor(new Date(expireDate).getTime() / 1000);
+    
+    if (isNaN(expireTime)) {
+      return res.status(400).json({
+        success: false,
+        error: "无效的日期格式"
+      });
+    }
+    
+    // 自动设置到期时间
+    const collection = dbClient.db('key_db').collection('keys');
+    
+    const result = await collection.updateOne(
+      { key, playerid: "all" }, // 仅限通用卡密
+      { $set: { 
+        expiretime: expireTime,
+        updatedAt: new Date()
+      }}
+    );
+    
+    if (result.matchedCount === 0) {
+      return res.status(200).json({
+        success: false,
+        error: "通用卡密不存在"
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: "到期时间设置成功",
+      key: key,
+      expireTime: expireTime,
+      expireDate: new Date(expireTime * 1000).toISOString()
+    });
+  } catch (error) {
+    console.error("设置到期时间错误:", error);
+    res.status(500).json({
+      success: false,
+      error: "自动设置失败: " + error.message
+    });
+  }
+});
+
 // 启动服务
 (async () => {
   try {
     await connectDB();
+    
+    // 创建索引（确保唯一性）
+    const db = dbClient.db('key_db');
+    const collection = db.collection('keys');
+    
+    // 创建索引（如果不存在）
+    const indexes = await collection.indexes();
+    const hasUniqueIndex = indexes.some(index => 
+      index.key.key === 1 && index.unique === true
+    );
+    
+    if (!hasUniqueIndex) {
+      await collection.createIndex({ key: 1 }, { unique: true });
+      console.log(' 唯一索引创建成功');
+    } else {
+      console.log(' 唯一索引已存在');
+    }
+    
     app.listen(port, () => {
-      console.log(`🚀 服务已启动: http://localhost:${port}`);
+      console.log(` 服务已启动: http://localhost:${port}`);
+      console.log(` 数据库状态: ${isDbConnected ? '已连接' : '未连接'}`);
     });
   } catch (err) {
     console.error('服务启动失败:', err);
