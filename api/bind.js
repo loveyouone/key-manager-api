@@ -4,26 +4,29 @@ module.exports = async (req, res) => {
   console.log("==== 开始处理 /bind 请求 ====");
   
   try {
-    // 严格验证请求体
-    if (!req.body || typeof req.body !== 'object') {
-      console.error("无效请求体");
+    // 确保正确解析JSON请求体
+    let requestBody;
+    try {
+      requestBody = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    } catch (e) {
+      console.error("JSON解析失败:", req.body);
       return res.status(400).json({
         success: false,
-        error: "请求需要JSON格式"
+        error: "无效的JSON格式"
       });
     }
 
-    const { key, playerId } = req.body;
+    const { key, playerId } = requestBody || {};
     
-    // 严格参数验证
-    if (!key || typeof key !== 'string' || !playerId || typeof playerId !== 'string') {
-      console.error("无效参数:", {key, playerId});
+    if (!key || !playerId) {
+      console.error("缺少参数:", {key, playerId});
       return res.status(400).json({
         success: false,
-        error: "必须提供有效的卡密和玩家ID"
+        error: "必须提供卡密和玩家ID"
       });
     }
 
+    // 以下保持原有逻辑不变
     const result = await bindKey(key, playerId);
     
     if (result.modifiedCount === 1) {
