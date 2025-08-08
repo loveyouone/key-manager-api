@@ -4,26 +4,29 @@ module.exports = async (req, res) => {
   console.log(`[UNBIND] 收到解绑请求`);
   
   try {
-    // 验证请求体格式
-    if (!req.body || typeof req.body !== 'object') {
-      console.warn('[UNBIND] 无效请求体');
+    // 确保正确解析JSON请求体
+    let requestBody;
+    try {
+      requestBody = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    } catch (e) {
+      console.error("JSON解析失败:", req.body);
       return res.status(400).json({ 
         success: false,
-        error: '请求需要JSON格式' 
+        error: "无效的JSON格式" 
       });
     }
 
-    const { key } = req.body;
+    const { key } = requestBody || {};
     
-    // 严格参数验证
-    if (!key || typeof key !== 'string') {
-      console.warn('[UNBIND] 无效卡密参数:', key);
+    if (!key) {
+      console.warn('[UNBIND] 缺少卡密参数');
       return res.status(400).json({ 
         success: false,
-        error: '必须提供有效的卡密字符串' 
+        error: '必须提供卡密' 
       });
     }
 
+    // 以下保持原有逻辑不变
     const result = await unbindKey(key);
     
     if (result.modifiedCount === 1) {
