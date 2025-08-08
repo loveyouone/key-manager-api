@@ -98,7 +98,7 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// 获取卡密（简化版）
+// 获取卡密
 app.get('/api/keys', async (req, res) => {
   try {
     const collection = dbClient.db('key_db').collection('keys');
