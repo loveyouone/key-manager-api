@@ -1,19 +1,17 @@
 require('dotenv').config();
 const express = require('express');
 const { MongoClient, ServerApiVersion } = require('mongodb');
-const apicache = require('apicache');
-const cache = apicache.middleware;
 
 // 初始化
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 缓存配置（仅缓存GET请求，5分钟）
-app.use(cache('5 minutes', (req) => req.method === 'GET'));
-
 // 中间件
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// 添加favicon处理中间件（修复500错误）
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // 全局错误处理
 process.on('uncaughtException', (err) => {
@@ -24,7 +22,7 @@ process.on('unhandledRejection', (err) => {
   console.error('[UNHANDLED REJECTION]', err);
 });
 
-// 数据库配置
+// 数据库配置（保持不变）
 const dbConfig = {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -39,7 +37,6 @@ const dbConfig = {
 let dbClient;
 let isDbConnected = false;
 
-// 数据库连接
 async function connectDB() {
   try {
     dbClient = new MongoClient(process.env.MONGODB_URI, dbConfig);
