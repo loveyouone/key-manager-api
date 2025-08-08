@@ -1,10 +1,11 @@
 {
-  "name": "kami-system-pro",
+  "name": "key-manager-api",
   "version": "2.0.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "build": "echo 'Building API server...'"
   },
   "dependencies": {
     "dotenv": "^16.3.1",
