@@ -10,7 +10,7 @@ const port = process.env.PORT || 3000;
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// 添加favicon处理中间件（修复500错误）
+// 添加favicon处理中间件
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // 全局错误处理
@@ -108,22 +108,10 @@ app.get('/api/keys', async (req, res) => {
     const collection = dbClient.db('key_db').collection('keys');
     const keys = await collection.find().limit(100).toArray();
     
-    // 转换时间戳为可读格式
-    const formattedKeys = keys.map(key => {
-      return {
-        key: key.key,
-        playerid: key.playerid,
-        reward: key.reward,
-        expiretime: key.expiretime ? new Date(key.expiretime * 1000).toISOString() : null,
-        createdAt: key.createdAt ? key.createdAt.toISOString() : null,
-        updatedAt: key.updatedAt ? key.updatedAt.toISOString() : null
-      };
-    });
-    
     res.json({
       success: true,
       count: keys.length,
-      data: formattedKeys
+      data: keys
     });
   } catch (err) {
     console.error('[GET /keys] 错误:', err);
@@ -139,13 +127,6 @@ app.get('/api/keys', async (req, res) => {
 app.post('/api/validate', async (req, res) => {
   try {
     const { key, playerId } = req.body;
-    
-    if (!key || !playerId) {
-      return res.status(400).json({
-        success: false,
-        error: "缺少必要参数: key 或 playerId"
-      });
-    }
     
     // 实时验证卡密
     const collection = dbClient.db('key_db').collection('keys');
@@ -167,7 +148,7 @@ app.post('/api/validate', async (req, res) => {
         return res.status(200).json({
           success: false,
           valid: false,
-          error: `卡密已过期 (过期时间: ${new Date(keyData.expiretime * 1000).toLocaleString()})`
+          error: "卡密已过期"
         });
       }
       return res.status(200).json({
@@ -207,13 +188,6 @@ app.post('/api/validate', async (req, res) => {
 app.post('/api/bind', async (req, res) => {
   try {
     const { key, playerId } = req.body;
-    
-    if (!key || !playerId) {
-      return res.status(400).json({
-        success: false,
-        error: "缺少必要参数: key 或 playerId"
-      });
-    }
     
     // 自动处理绑定
     const collection = dbClient.db('key_db').collection('keys');
@@ -255,13 +229,6 @@ app.post('/api/unbind', async (req, res) => {
   try {
     const { key } = req.body;
     
-    if (!key) {
-      return res.status(400).json({
-        success: false,
-        error: "缺少必要参数: key"
-      });
-    }
-    
     // 自动处理解绑
     const collection = dbClient.db('key_db').collection('keys');
     
@@ -300,22 +267,8 @@ app.post('/api/set_expire', async (req, res) => {
   try {
     const { key, expireDate } = req.body;
     
-    if (!key || !expireDate) {
-      return res.status(400).json({
-        success: false,
-        error: "缺少必要参数: key 或 expireDate"
-      });
-    }
-    
     // 转换日期为Unix时间戳
     const expireTime = Math.floor(new Date(expireDate).getTime() / 1000);
-    
-    if (isNaN(expireTime)) {
-      return res.status(400).json({
-        success: false,
-        error: "无效的日期格式"
-      });
-    }
     
     // 自动设置到期时间
     const collection = dbClient.db('key_db').collection('keys');
@@ -339,8 +292,7 @@ app.post('/api/set_expire', async (req, res) => {
       success: true,
       message: "到期时间设置成功",
       key: key,
-      expireTime: expireTime,
-      expireDate: new Date(expireTime * 1000).toISOString()
+      expireTime: expireTime
     });
   } catch (error) {
     console.error("设置到期时间错误:", error);
@@ -359,23 +311,11 @@ app.post('/api/set_expire', async (req, res) => {
     // 创建索引（确保唯一性）
     const db = dbClient.db('key_db');
     const collection = db.collection('keys');
-    
-    // 创建索引（如果不存在）
-    const indexes = await collection.indexes();
-    const hasUniqueIndex = indexes.some(index => 
-      index.key.key === 1 && index.unique === true
-    );
-    
-    if (!hasUniqueIndex) {
-      await collection.createIndex({ key: 1 }, { unique: true });
-      console.log(' 唯一索引创建成功');
-    } else {
-      console.log(' 唯一索引已存在');
-    }
+    await collection.createIndex({ key: 1 }, { unique: true });
+    console.log(' 唯一索引创建成功');
     
     app.listen(port, () => {
       console.log(` 服务已启动: http://localhost:${port}`);
-      console.log(` 数据库状态: ${isDbConnected ? '已连接' : '未连接'}`);
     });
   } catch (err) {
     console.error('服务启动失败:', err);
