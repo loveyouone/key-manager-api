@@ -27,7 +27,7 @@ async function connectToDatabase() {
 }
 
 // 数据库操作方法
-module.exports = {
+const db = {
   async getKey(key) {
     const { db } = await connectToDatabase();
     return await db.collection('keys').findOne({ key });
@@ -55,3 +55,6 @@ module.exports = {
     return await db.collection('keys').find({}).toArray();
   }
 };
+
+// 关键修复：使用module.exports导出
+module.exports = db;
