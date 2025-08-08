@@ -3,13 +3,23 @@
   "builds": [
     {
       "src": "server.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "maxLambdaSize": "50mb",
+        "includeFiles": ["api/**", "utils/**"]
+      }
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "server.js"
+      "dest": "server.js",
+      "headers": {
+        "Access-Control-Allow-Origin": "*"
+      }
     }
-  ]
+  ],
+  "regions": ["hkg1"],
+  "memory": 1024,
+  "maxDuration": 30
 }
