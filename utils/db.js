@@ -26,35 +26,44 @@ async function connectToDatabase() {
   return { client, db };
 }
 
-// 数据库操作方法
-const db = {
-  async getKey(key) {
-    const { db } = await connectToDatabase();
-    return await db.collection('keys').findOne({ key });
-  },
-
+// 全自动数据库操作
+module.exports = {
+  // 绑定卡密（自动创建新卡密）
   async bindKey(key, playerId) {
     const { db } = await connectToDatabase();
+    
     return await db.collection('keys').updateOne(
       { key },
-      { $set: { playerid: playerId, updatedAt: new Date() } },
-      { upsert: false }
+      {
+        $set: { 
+          playerid: playerId,
+          updatedAt: new Date()
+        },
+        $setOnInsert: {
+          createdAt: new Date(),
+          reward: "自动创建卡密",
+          expiretime: null
+        }
+      },
+      { upsert: true } // 关键：自动创建不存在的卡密
     );
   },
 
+  // 解绑卡密（自动更新）
   async unbindKey(key) {
     const { db } = await connectToDatabase();
     return await db.collection('keys').updateOne(
       { key },
-      { $set: { playerid: '待定', lastunbind: new Date() } }
+      { $set: { 
+        playerid: '待定',
+        updatedAt: new Date() 
+      }}
     );
   },
 
+  // 获取所有卡密
   async getAllKeys() {
     const { db } = await connectToDatabase();
     return await db.collection('keys').find({}).toArray();
   }
 };
-
-// 关键修复：使用module.exports导出
-module.exports = db;
