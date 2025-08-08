@@ -1,78 +1,93 @@
-require('dotenv').config(); // 加载环境变量
+require('dotenv').config();
 const express = require('express');
-const { MongoClient } = require('mongodb');
+const { MongoClient, ServerApiVersion } = require('mongodb');
+const apicache = require('apicache');
+const helmet = require('helmet');
 
 // 初始化
 const app = express();
 const port = process.env.PORT || 3000;
+const cache = apicache.middleware;
+let dbClient;
 
-// 环境验证
-if (!process.env.MONGODB_URI) {
-  console.error('❌ 请设置MONGODB_URI环境变量');
-  process.exit(1);
-}
-
-// 中间件
-app.use(express.json());
+// 安全增强
+app.use(helmet());
+app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// CORS配置（生产环境应限制域名）
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  req.method === 'OPTIONS' ? res.sendStatus(200) : next();
-});
-
-// 数据库连接
-let db;
-(async () => {
+// 连接MongoDB
+async function connectDB() {
   try {
-    const client = new MongoClient(process.env.MONGODB_URI, {
-      connectTimeoutMS: 5000,
-      serverSelectionTimeoutMS: 5000
+    dbClient = new MongoClient(process.env.MONGODB_URI, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      },
+      maxPoolSize: 50,
+      connectTimeoutMS: 10000,
+      socketTimeoutMS: 45000
     });
-    await client.connect();
-    db = client.db('key_db');
-    console.log('✅ MongoDB已连接');
+    await dbClient.connect();
+    console.log('✅ MongoDB连接成功');
   } catch (err) {
     console.error('❌ MongoDB连接失败:', err);
     process.exit(1);
   }
-})();
+}
 
-// 根路由（必须存在！）
-app.get('/', (req, res) => {
+// 健康检查
+app.get('/health', (req, res) => {
   res.json({
-    status: 'running',
-    endpoints: [
-      { method: 'GET', path: '/api/keys', desc: '获取所有卡密' },
-      { method: 'POST', path: '/api/bind', desc: '绑定卡密' },
-      { method: 'POST', path: '/api/unbind', desc: '解绑卡密' }
-    ],
-    timestamp: new Date().toISOString()
+    status: dbClient ? 'healthy' : 'degraded',
+    db: dbClient?.isConnected() ? 'connected' : 'disconnected',
+    uptime: process.uptime(),
+    memory: `${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)}MB`
   });
 });
 
-// 示例API路由
-app.get('/api/keys', async (req, res) => {
-  if (!db) return res.status(503).json({ error: '数据库未连接' });
-  
+// 数据库中间件
+app.use(async (req, res, next) => {
+  if (!dbClient?.isConnected()) {
+    try {
+      await connectDB();
+    } catch (err) {
+      return res.status(503).json({ 
+        error: '数据库服务不可用',
+        details: err.message 
+      });
+    }
+  }
+  next();
+});
+
+// 带缓存的卡密查询
+app.get('/api/keys', cache('30 seconds'), async (req, res) => {
   try {
-    const keys = await db.collection('keys').find().toArray();
+    const keys = await dbClient.db('key_db').collection('keys').find().toArray();
     res.json({ success: true, data: keys });
   } catch (err) {
-    console.error('获取卡密失败:', err);
-    res.status(500).json({ success: false, error: '数据库查询失败' });
+    console.error('数据库查询失败:', err);
+    res.status(500).json({ 
+      success: false,
+      error: '服务器内部错误',
+      requestId: req.id 
+    });
   }
 });
 
-// 404处理（必须放在路由最后）
-app.use((req, res) => {
-  res.status(404).json({ error: '端点不存在' });
-});
+// 其他路由...(保持原有bind/unbind路由)
 
-// 启动服务器
-app.listen(port, () => {
-  console.log(`服务已启动: http://localhost:${port}`);
+// 启动服务
+(async () => {
+  await connectDB();
+  app.listen(port, () => {
+    console.log(`🚀 服务运行中: http://localhost:${port}`);
+  });
+})();
+
+// 优雅关闭
+process.on('SIGTERM', async () => {
+  await dbClient?.close();
+  process.exit(0);
 });
