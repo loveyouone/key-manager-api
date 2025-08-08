@@ -1,5 +1,5 @@
 // api/bind.js
-import { getDatabase } from '../db.js';
+import { getDatabase } from '../utils/db.js';
 
 export default async (req, res) => {
     console.log("==== 开始处理 /bind 请求 ====");
