@@ -1,41 +1,50 @@
-export default async (req, res) => {
+// 关键修复：使用require导入db对象
+const db = require('../utils/db');
+
+module.exports = async (req, res) => {
   console.log("==== 开始处理 /bind 请求 ====");
   
   try {
-    // 调试日志
-    console.log("接收到的请求体:", req.body);
-    
-    const { key, playerId } = req.body || {};
-    
-    // 严格参数验证
-    if (typeof key !== 'string' || typeof playerId !== 'string') {
-      console.error("参数验证失败:", { key, playerId });
+    // 确保正确解析JSON请求体
+    let requestBody;
+    try {
+      requestBody = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    } catch (e) {
+      console.error("JSON解析失败:", req.body);
       return res.status(400).json({
         success: false,
-        error: "必须提供有效的卡密(key)和玩家ID(playerId)",
-        received: { key, playerId }
+        error: "无效的JSON格式"
       });
     }
 
-    // 业务逻辑保持不变
-    const result = await bindKey(key, playerId);
+    const { key, playerId } = requestBody || {};
+    
+    if (!key || typeof key !== 'string' || !playerId || typeof playerId !== 'string') {
+      console.error("无效参数:", {key, playerId});
+      return res.status(400).json({
+        success: false,
+        error: "必须提供有效的卡密和玩家ID"
+      });
+    }
+
+    // 关键修复：使用db.bindKey调用
+    const result = await db.bindKey(key, playerId);
     
     if (result.modifiedCount === 1) {
-      console.log(`绑定成功: ${key} -> ${playerId}`);
+      console.log(`卡密 ${key} 成功绑定给玩家 ${playerId}`);
       return res.status(200).json({
         success: true,
         message: "绑定成功"
       });
+    } else {
+      console.error(`卡密 ${key} 绑定失败`);
+      return res.status(400).json({
+        success: false,
+        error: "卡密不存在或绑定失败"
+      });
     }
-    
-    console.error(`绑定失败: ${key}`);
-    return res.status(400).json({
-      success: false,
-      error: "卡密不存在或绑定失败"
-    });
-    
   } catch (error) {
-    console.error("绑定处理错误:", error);
+    console.error("绑定过程中发生错误:", error);
     return res.status(500).json({
       success: false,
       error: "服务器内部错误"
