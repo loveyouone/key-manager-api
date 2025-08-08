@@ -1,10 +1,15 @@
 require('dotenv').config();
 const express = require('express');
 const { MongoClient, ServerApiVersion } = require('mongodb');
+const apicache = require('apicache');
+const cache = apicache.middleware;
 
 // 初始化
 const app = express();
 const port = process.env.PORT || 3000;
+
+// 缓存配置（仅缓存GET请求，5分钟）
+app.use(cache('5 minutes', (req) => req.method === 'GET'));
 
 // 中间件
 app.use(express.json({ limit: '10kb' }));
