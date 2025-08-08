@@ -1,14 +1,13 @@
-// 关键修复：使用CommonJS require语法
 const express = require('express');
 const bodyParser = require('body-parser');
 const keysHandler = require('./api/keys');
-const unbindHandler = require('./api/unbind');
 const bindHandler = require('./api/bind');
+const unbindHandler = require('./api/unbind');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// CORS中间件
+// CORS支持
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST');
@@ -16,51 +15,23 @@ app.use((req, res, next) => {
   next();
 });
 
-// 关键修复：增强body-parser配置
-app.use(bodyParser.json({
-  verify: (req, res, buf) => {
-    try {
-      // 存储原始body数据用于调试
-      req.rawBody = buf.toString();
-      // 强制解析JSON，避免undefined
-      JSON.parse(req.rawBody);
-    } catch (e) {
-      console.error('无效的JSON格式:', req.rawBody);
-      throw new Error('Invalid JSON');
-    }
-  },
-  strict: true  // 只接受数组和对象
-}));
+// JSON解析
+app.use(bodyParser.json());
 
-// 路由
+// API路由
 app.get('/keys', keysHandler);
-app.post('/unbind', unbindHandler);
 app.post('/bind', bindHandler);
+app.post('/unbind', unbindHandler);
 
-// 增强的错误处理中间件
+// 错误处理
 app.use((err, req, res, next) => {
-  console.error('请求处理错误:', {
-    url: req.url,
-    method: req.method,
-    headers: req.headers,
-    body: req.rawBody,
-    error: err.message
-  });
-
-  if (err.message.includes('JSON')) {
-    return res.status(400).json({ 
-      success: false,
-      error: "无效的JSON请求格式" 
-    });
-  }
-
+  console.error('服务器错误:', err);
   res.status(500).json({ 
     success: false,
-    error: '服务器内部错误' 
+    error: '全自动处理失败' 
   });
 });
 
 app.listen(port, () => {
-  console.log(`服务器运行在端口 ${port}`);
-  console.log('已启用严格JSON模式，只接受有效的JSON请求体');
+  console.log(`全自动卡密管理系统运行在端口 ${port}`);
 });
