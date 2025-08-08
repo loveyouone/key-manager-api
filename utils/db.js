@@ -1,64 +1,57 @@
-import { MongoClient } from 'mongodb';
+const { MongoClient } = require('mongodb');
 
-// 全局变量缓存连接
+const uri = process.env.MONGODB_URI;
+const dbName = process.env.MONGODB_DB_NAME || 'key_db';
+
 let cachedClient = null;
 let cachedDb = null;
 
-// MongoDB 连接 URI (从环境变量获取)
-const MONGODB_URI = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-  throw new Error(
-    '请定义 MONGODB_URI 环境变量，格式：mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<dbname>'
-  );
-}
-
-export async function connectToDatabase() {
+async function connectToDatabase() {
   if (cachedClient && cachedDb) {
     return { client: cachedClient, db: cachedDb };
   }
 
-  const client = new MongoClient(MONGODB_URI, {
+  const client = new MongoClient(uri, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 30000,
-    connectTimeoutMS: 30000,
-    maxPoolSize: 50,
-    retryWrites: true,
-    retryReads: true
+    serverSelectionTimeoutMS: 5000
   });
 
-  try {
-    console.log('正在连接 MongoDB...');
-    await client.connect();
-    
-    // 验证连接
-    await client.db().admin().ping();
-    console.log('✅ MongoDB 连接成功');
+  await client.connect();
+  const db = client.db(dbName);
 
-    // 指定数据库
-    const db = client.db('key_db');
-    
-    // 缓存连接
-    cachedClient = client;
-    cachedDb = db;
+  cachedClient = client;
+  cachedDb = db;
 
-    return { client, db };
-  } catch (error) {
-    console.error('❌ MongoDB 连接失败:', error);
-    
-    // 5秒后自动重试
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    return connectToDatabase();
-  }
+  return { client, db };
 }
 
-// 自动关闭连接的清理钩子
-process.on('SIGINT', async () => {
-  if (cachedClient) {
-    await cachedClient.close();
-    console.log('MongoDB 连接已关闭');
-    process.exit(0);
+// 数据库操作方法
+module.exports = {
+  async getKey(key) {
+    const { db } = await connectToDatabase();
+    return await db.collection('keys').findOne({ key });
+  },
+
+  async bindKey(key, playerId) {
+    const { db } = await connectToDatabase();
+    return await db.collection('keys').updateOne(
+      { key },
+      { $set: { playerid: playerId, updatedAt: new Date() } },
+      { upsert: false }
+    );
+  },
+
+  async unbindKey(key) {
+    const { db } = await connectToDatabase();
+    return await db.collection('keys').updateOne(
+      { key },
+      { $set: { playerid: '待定', lastunbind: new Date() } }
+    );
+  },
+
+  async getAllKeys() {
+    const { db } = await connectToDatabase();
+    return await db.collection('keys').find({}).toArray();
   }
-});
+};
