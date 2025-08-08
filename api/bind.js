@@ -4,13 +4,23 @@ module.exports = async (req, res) => {
   console.log("==== 开始处理 /bind 请求 ====");
   
   try {
-    const { key, playerId } = req.body;
-    
-    if (!key || !playerId) {
-      console.error("缺少参数");
+    // 严格验证请求体
+    if (!req.body || typeof req.body !== 'object') {
+      console.error("无效请求体");
       return res.status(400).json({
         success: false,
-        error: "缺少参数: key 或 playerId"
+        error: "请求需要JSON格式"
+      });
+    }
+
+    const { key, playerId } = req.body;
+    
+    // 严格参数验证
+    if (!key || typeof key !== 'string' || !playerId || typeof playerId !== 'string') {
+      console.error("无效参数:", {key, playerId});
+      return res.status(400).json({
+        success: false,
+        error: "必须提供有效的卡密和玩家ID"
       });
     }
 
