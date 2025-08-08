@@ -1,14 +1,27 @@
 const { unbindKey } = require('../utils/db');
 
 module.exports = async (req, res) => {
-  console.log(`[UNBIND] 收到解绑请求: ${JSON.stringify(req.body)}`);
+  console.log(`[UNBIND] 收到解绑请求`);
   
   try {
+    // 验证请求体格式
+    if (!req.body || typeof req.body !== 'object') {
+      console.warn('[UNBIND] 无效请求体');
+      return res.status(400).json({ 
+        success: false,
+        error: '请求需要JSON格式' 
+      });
+    }
+
     const { key } = req.body;
     
-    if (!key) {
-      console.warn('[UNBIND] 无效请求: 缺少卡密参数');
-      return res.status(400).json({ error: '请求中缺少卡密参数' });
+    // 严格参数验证
+    if (!key || typeof key !== 'string') {
+      console.warn('[UNBIND] 无效卡密参数:', key);
+      return res.status(400).json({ 
+        success: false,
+        error: '必须提供有效的卡密字符串' 
+      });
     }
 
     const result = await unbindKey(key);
