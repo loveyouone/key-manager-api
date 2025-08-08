@@ -10,16 +10,6 @@
     {
       "src": "/api/(.*)",
       "dest": "server.js"
-    },
-    {
-      "src": "/",
-      "dest": "server.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "*"
-      }
     }
-  ],
-  "env": {
-    "MONGODB_URI": "@mongodb_uri"  // 需要在Vercel后台设置
-  }
+  ]
 }
