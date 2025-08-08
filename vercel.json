@@ -5,7 +5,6 @@
       "src": "server.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["api/**", "utils/**"],
         "maxLambdaSize": "50mb"
       }
     }
@@ -13,10 +12,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "server.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "*"
-      }
+      "dest": "server.js"
     }
   ],
   "regions": ["hkg1"],
