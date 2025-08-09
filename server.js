@@ -43,12 +43,21 @@ async function connectDB() {
     await dbClient.connect();
     isDbConnected = true;
     console.log(' MongoDB连接成功');
+    
+    // 连接成功后创建索引
+    const db = dbClient.db('key_db');
+    const collection = db.collection('keys');
+    await collection.createIndex({ key: 1 }, { unique: true });
+    console.log(' 唯一索引创建成功');
   } catch (err) {
     console.error(' MongoDB连接失败:', err);
     isDbConnected = false;
-    throw err;
+    // 不抛出错误，避免阻塞服务启动
   }
 }
+
+// 连接数据库（不阻塞服务启动）
+connectDB().catch(console.error);
 
 // 数据库状态中间件
 app.use(async (req, res, next) => {
@@ -63,6 +72,16 @@ app.use(async (req, res, next) => {
       });
     }
   }
+  
+  // 再次检查连接状态
+  if (!isDbConnected) {
+    return res.status(503).json({
+      status: 'database_error',
+      message: '数据库连接失败',
+      timestamp: new Date().toISOString()
+    });
+  }
+  
   next();
 });
 
@@ -86,6 +105,14 @@ app.get('/', (req, res) => {
 // 健康检查
 app.get('/health', async (req, res) => {
   try {
+    if (!isDbConnected) {
+      return res.status(503).json({
+        status: 'degraded',
+        database: 'disconnected',
+        error: 'No database connection'
+      });
+    }
+    
     await dbClient.db().command({ ping: 1 });
     res.json({
       status: 'healthy',
@@ -127,6 +154,13 @@ app.get('/api/keys', async (req, res) => {
 app.post('/api/validate', async (req, res) => {
   try {
     const { key, playerId } = req.body;
+    
+    if (!key || !playerId) {
+      return res.status(400).json({
+        success: false,
+        error: "缺少必要参数: key 或 playerId"
+      });
+    }
     
     // 实时验证卡密
     const collection = dbClient.db('key_db').collection('keys');
@@ -189,6 +223,13 @@ app.post('/api/bind', async (req, res) => {
   try {
     const { key, playerId } = req.body;
     
+    if (!key || !playerId) {
+      return res.status(400).json({
+        success: false,
+        error: "缺少必要参数: key 或 playerId"
+      });
+    }
+    
     // 自动处理绑定
     const collection = dbClient.db('key_db').collection('keys');
     
@@ -229,6 +270,13 @@ app.post('/api/unbind', async (req, res) => {
   try {
     const { key } = req.body;
     
+    if (!key) {
+      return res.status(400).json({
+        success: false,
+        error: "缺少必要参数: key"
+      });
+    }
+    
     // 自动处理解绑
     const collection = dbClient.db('key_db').collection('keys');
     
@@ -267,8 +315,22 @@ app.post('/api/set_expire', async (req, res) => {
   try {
     const { key, expireDate } = req.body;
     
+    if (!key || !expireDate) {
+      return res.status(400).json({
+        success: false,
+        error: "缺少必要参数: key 或 expireDate"
+      });
+    }
+    
     // 转换日期为Unix时间戳
     const expireTime = Math.floor(new Date(expireDate).getTime() / 1000);
+    
+    if (isNaN(expireTime)) {
+      return res.status(400).json({
+        success: false,
+        error: "无效的日期格式"
+      });
+    }
     
     // 自动设置到期时间
     const collection = dbClient.db('key_db').collection('keys');
@@ -303,24 +365,22 @@ app.post('/api/set_expire', async (req, res) => {
   }
 });
 
-// 启动服务
-(async () => {
-  try {
-    await connectDB();
-    
-    // 创建索引（确保唯一性）
-    const db = dbClient.db('key_db');
-    const collection = db.collection('keys');
-    await collection.createIndex({ key: 1 }, { unique: true });
-    console.log(' 唯一索引创建成功');
-    
-    app.listen(port, () => {
-      console.log(` 服务已启动: http://localhost:${port}`);
-    });
-  } catch (err) {
-    console.error('服务启动失败:', err);
-    process.exit(1);
-  }
-})();
+// 全局错误处理中间件
+app.use((err, req, res, next) => {
+  console.error('全局错误:', err.stack);
+  res.status(500).json({
+    status: 'error',
+    message: '内部服务器错误',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 启动服务（适配Vercel环境）
+if (require.main === module) {
+  // 本地运行时监听端口
+  app.listen(port, () => {
+    console.log(`服务已启动: http://localhost:${port}`);
+  });
+}
 
 module.exports = app;
