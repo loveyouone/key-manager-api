@@ -161,16 +161,17 @@ app.get('/api/keys', async (req, res) => {
   }
 });
 
-// 卡密验证
+// 卡密验证 - 修复字段名
 app.post('/api/validate', async (req, res) => {
-  console.log('验证请求:', req.body); // 添加日志
+  console.log('验证请求:', req.body);
   try {
-    const { key, playerId } = req.body;
+    // 修复字段名: playerId -> playerid
+    const { key, playerid } = req.body;  // 关键修复
     
-    if (!key || !playerId) {
+    if (!key || !playerid) {
       return res.status(400).json({
         success: false,
-        error: "缺少必要参数: key 或 playerId"
+        error: "缺少必要参数: key 或 playerid"  // 更新错误消息
       });
     }
     
@@ -178,7 +179,7 @@ app.post('/api/validate', async (req, res) => {
     const collection = dbClient.db('key_db').collection('keys');
     const keyData = await collection.findOne({ key });
     
-    console.log('查询结果:', keyData); // 添加日志
+    console.log('查询结果:', keyData);
     
     if (!keyData) {
       return res.status(200).json({
@@ -209,7 +210,7 @@ app.post('/api/validate', async (req, res) => {
     }
     
     // 绑定卡密检查
-    if (keyData.playerid !== playerId) {
+    if (keyData.playerid !== playerid) {  // 使用修复后的字段
       return res.status(200).json({
         success: false,
         valid: false,
@@ -236,15 +237,16 @@ app.post('/api/validate', async (req, res) => {
   }
 });
 
-// 绑定卡密
+// 绑定卡密 - 修复字段名
 app.post('/api/bind', async (req, res) => {
   try {
-    const { key, playerId } = req.body;
+    // 修复字段名: playerId -> playerid
+    const { key, playerid } = req.body;  // 关键修复
     
-    if (!key || !playerId) {
+    if (!key || !playerid) {
       return res.status(400).json({
         success: false,
-        error: "缺少必要参数: key 或 playerId"
+        error: "缺少必要参数: key 或 playerid"  // 更新错误消息
       });
     }
     
@@ -255,7 +257,7 @@ app.post('/api/bind', async (req, res) => {
       { key },
       {
         $set: { 
-          playerid: playerId,
+          playerid: playerid,  // 使用修复后的字段
           updatedAt: new Date()
         },
         $setOnInsert: {
@@ -271,7 +273,7 @@ app.post('/api/bind', async (req, res) => {
       success: true,
       message: "卡密绑定成功",
       key: key,
-      playerId: playerId,
+      playerId: playerid,  // 保持一致性
       created: result.upsertedCount > 0
     });
   } catch (error) {
@@ -283,7 +285,7 @@ app.post('/api/bind', async (req, res) => {
   }
 });
 
-// 解绑卡密
+// 解绑卡密 - 保持不变
 app.post('/api/unbind', async (req, res) => {
   try {
     const { key } = req.body;
@@ -328,7 +330,7 @@ app.post('/api/unbind', async (req, res) => {
   }
 });
 
-// 设置到期时间
+// 设置到期时间 - 保持不变
 app.post('/api/set_expire', async (req, res) => {
   try {
     const { key, expireDate } = req.body;
@@ -341,7 +343,7 @@ app.post('/api/set_expire', async (req, res) => {
     }
     
     // 转换日期为Unix时间戳
-    const expireTime = Math.floor(new Date(expireDate).getTime() / 1000);
+    const expireTime = Math.floor(new Date(expireDate).getTime() / 1000;
     
     if (isNaN(expireTime)) {
       return res.status(400).json({
