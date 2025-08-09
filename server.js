@@ -10,6 +10,14 @@ const port = process.env.PORT || 3000;
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// 添加CORS支持 - 解决跨域问题
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  next();
+});
+
 // 添加favicon处理中间件
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
@@ -30,8 +38,8 @@ const dbConfig = {
     deprecationErrors: true,
   },
   maxPoolSize: 10,
-  connectTimeoutMS: 8000,
-  socketTimeoutMS: 30000
+  connectTimeoutMS: 15000, // 增加到15秒
+  socketTimeoutMS: 45000   // 增加到45秒
 };
 
 let dbClient;
@@ -39,20 +47,20 @@ let isDbConnected = false;
 
 async function connectDB() {
   try {
+    console.log('正在连接MongoDB...');
     dbClient = new MongoClient(process.env.MONGODB_URI, dbConfig);
     await dbClient.connect();
     isDbConnected = true;
-    console.log(' MongoDB连接成功');
+    console.log('✅ MongoDB连接成功');
     
     // 连接成功后创建索引
     const db = dbClient.db('key_db');
     const collection = db.collection('keys');
     await collection.createIndex({ key: 1 }, { unique: true });
-    console.log(' 唯一索引创建成功');
+    console.log('🔑 唯一索引创建成功');
   } catch (err) {
-    console.error(' MongoDB连接失败:', err);
+    console.error('❌ MongoDB连接失败:', err.message);
     isDbConnected = false;
-    // 不抛出错误，避免阻塞服务启动
   }
 }
 
@@ -63,6 +71,7 @@ connectDB().catch(console.error);
 app.use(async (req, res, next) => {
   if (!isDbConnected) {
     try {
+      console.log('尝试重新连接数据库...');
       await connectDB();
     } catch (err) {
       return res.status(503).json({
@@ -89,6 +98,7 @@ app.use(async (req, res, next) => {
 app.get('/', (req, res) => {
   res.json({
     status: 'running',
+    version: '2.1.0',
     endpoints: {
       keys: 'GET /api/keys',
       bind: 'POST /api/bind',
@@ -118,7 +128,8 @@ app.get('/health', async (req, res) => {
       status: 'healthy',
       database: 'connected',
       uptime: process.uptime(),
-      memory: `${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)}MB`
+      memory: `${(process.memoryUsage().rss / 1024 / 1024).toFixed(2)}MB`,
+      node: process.version
     });
   } catch (err) {
     res.status(503).json({
@@ -152,6 +163,7 @@ app.get('/api/keys', async (req, res) => {
 
 // 卡密验证
 app.post('/api/validate', async (req, res) => {
+  console.log('验证请求:', req.body); // 添加日志
   try {
     const { key, playerId } = req.body;
     
@@ -165,6 +177,8 @@ app.post('/api/validate', async (req, res) => {
     // 实时验证卡密
     const collection = dbClient.db('key_db').collection('keys');
     const keyData = await collection.findOne({ key });
+    
+    console.log('查询结果:', keyData); // 添加日志
     
     if (!keyData) {
       return res.status(200).json({
@@ -189,7 +203,8 @@ app.post('/api/validate', async (req, res) => {
         success: true,
         valid: true,
         reward: keyData.reward || "欢迎使用",
-        message: "验证成功"
+        message: "验证成功",
+        keyType: "通用"
       });
     }
     
@@ -198,7 +213,8 @@ app.post('/api/validate', async (req, res) => {
       return res.status(200).json({
         success: false,
         valid: false,
-        error: "卡密未绑定到此账号"
+        error: "卡密未绑定到此账号",
+        boundTo: keyData.playerid
       });
     }
     
@@ -206,14 +222,16 @@ app.post('/api/validate', async (req, res) => {
       success: true,
       valid: true,
       reward: keyData.reward || "欢迎使用",
-      message: "验证成功"
+      message: "验证成功",
+      keyType: "绑定"
     });
     
   } catch (error) {
     console.error("验证错误:", error);
     res.status(500).json({
       success: false,
-      error: "验证过程出错"
+      error: "验证过程出错",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
